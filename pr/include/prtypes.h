@@ -477,8 +477,14 @@ typedef PRUint16 PRUnichar;
 typedef PRInt64 PRWord;
 typedef PRUint64 PRUword;
 #else
+#if defined(__CHERI_PURE_CAPABILITY__)
+#include <stdint.h>
+typedef intptr_t PRWord;
+typedef uintptr_t PRUword;
+#else
 typedef long PRWord;
 typedef unsigned long PRUword;
+#endif
 #endif
 
 /*
