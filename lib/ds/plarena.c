@@ -25,7 +25,12 @@ static PLArenaStats *arena_stats_list;
 #define COUNT(pool,what)  /* nothing */
 #endif
 
+#if defined(__CHERI_PURE_CAPABILITY__)
+#include <stdalign.h>
+#define PL_ARENA_DEFAULT_ALIGN  alignof(max_align_t)
+#else
 #define PL_ARENA_DEFAULT_ALIGN  sizeof(double)
+#endif
 
 PR_IMPLEMENT(void) PL_InitArenaPool(
     PLArenaPool *pool, const char *name, PRUint32 size, PRUint32 align)

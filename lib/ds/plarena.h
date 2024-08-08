@@ -137,13 +137,23 @@ PL_ASAN_VISIBILITY(void) __asan_unpoison_memory_region(
  * per ALLOCATE and GROW.
  */
 #ifdef PL_ARENA_CONST_ALIGN_MASK
+#if __has_builtin(__builtin_align_up)
+#define PL_ARENA_ALIGN(pool, n) \
+        __builtin_align_up(n, PL_ARENA_CONST_ALIGN_MASK + 1)
+#else
 #define PL_ARENA_ALIGN(pool, n) (((PRUword)(n) + PL_ARENA_CONST_ALIGN_MASK) \
                                 & ~PL_ARENA_CONST_ALIGN_MASK)
+#endif
 
 #define PL_INIT_ARENA_POOL(pool, name, size) \
         PL_InitArenaPool(pool, name, size, PL_ARENA_CONST_ALIGN_MASK + 1)
 #else
+#if __has_builtin(__builtin_align_up)
+#define PL_ARENA_ALIGN(pool, n) \
+        __builtin_align_up(n, (size_t) ((pool)->mask + 1))
+#else
 #define PL_ARENA_ALIGN(pool, n) (((PRUword)(n) + (pool)->mask) & ~(pool)->mask)
+#endif
 #endif
 
 #define PL_ARENA_ALLOCATE(p, pool, nb) \
@@ -165,6 +175,26 @@ PL_ASAN_VISIBILITY(void) __asan_unpoison_memory_region(
         } \
     PR_END_MACRO
 
+#if defined(__CHERI_PURE_CAPABILITY__)
+#define PL_ARENA_GROW(p, pool, size, incr) \
+    PR_BEGIN_MACRO \
+        PLArena *_a = (pool)->current; \
+        PRUint32 _incr = PL_ARENA_ALIGN(pool, (PRUint32)incr); \
+        if (_incr < (PRUint32)incr) { \
+            p = NULL; \
+        } else if (_a->avail == (PRUword)(p) + (ptraddr_t)PL_ARENA_ALIGN(pool, size) && \
+            _incr <= (_a->limit - _a->avail)) { \
+            PL_MAKE_MEM_UNDEFINED((unsigned char *)(p) + size, (PRUint32)incr); \
+            _a->avail += _incr; \
+            PL_ArenaCountInplaceGrowth(pool, size, (PRUint32)incr); \
+        } else { \
+            p = PL_ArenaGrow(pool, p, size, (PRUint32)incr); \
+        } \
+        if (p) {\
+            PL_ArenaCountGrowth(pool, size, (PRUint32)incr); \
+        } \
+    PR_END_MACRO
+#else   // !__CHERI_PURE_CAPABILITY__
 #define PL_ARENA_GROW(p, pool, size, incr) \
     PR_BEGIN_MACRO \
         PLArena *_a = (pool)->current; \
@@ -183,6 +213,7 @@ PL_ASAN_VISIBILITY(void) __asan_unpoison_memory_region(
             PL_ArenaCountGrowth(pool, size, (PRUint32)incr); \
         } \
     PR_END_MACRO
+#endif  // !__CHERI_PURE_CAPABILITY__
 
 #define PL_ARENA_MARK(pool) ((void *) (pool)->current->avail)
 #define PR_UPTRDIFF(p,q) ((PRUword)(p) - (PRUword)(q))
